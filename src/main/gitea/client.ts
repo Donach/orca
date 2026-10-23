@@ -39,6 +39,8 @@ export type GiteaAuthStatus = {
 type RequestOptions = {
   searchParams?: Record<string, string | number>
   timeoutMs?: number
+  // Why: only a single-resource fetch may read 404 as "absent". See requestJsonAtBase.
+  allowNotFound?: boolean
 }
 
 function envValue(name: string): string | null {
@@ -97,7 +99,8 @@ async function requestJsonAtBase<T>(
     })
     if (!response.ok) {
       await cancelUnreadResponseBody(response)
-      if (throwOnFailure) {
+      // Why: listing 404s still signal repository or access failures.
+      if (throwOnFailure && !(options.allowNotFound && response.status === 404)) {
         throw new Error(`Gitea request failed: HTTP ${response.status}`)
       }
       return null
@@ -308,7 +311,7 @@ export async function getGiteaPullRequestForBranch(
   const raw = await requestJson<RawGiteaPullRequest>(
     repo,
     `/repos/${encodedRepoPath(repo)}/pulls/${encodeURIComponent(String(linkedPRNumber))}`,
-    {},
+    { allowNotFound: true },
     throwOnFailure
   )
   return raw ? normalizePullRequest(repo, raw) : null
